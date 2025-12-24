@@ -19,18 +19,15 @@ jobs:
 
       - name: Train Model with MLflow Project
         run: |
-          TARGET_DIR=$(find . -iname "MLproject" -exec dirname {} \; | head -n 1)
-          cd "$TARGET_DIR"
-          # Tambahin --env-manager local biar gak error Conda lagi
-          mlflow run . --env-manager local
-
-      - name: Populate .workflow folder
-        run: |
-          # Pastikan folder tujuan ada
-          mkdir -p Workflow-CI/.workflow
-          cp .github/workflows/ci_pipeline.yml Workflow-CI/.workflow/ci_pipeline.yml || true
+          # Pakai -type f biar dapet filenya, bukan foldernya
+          MLPROJECT_FILE=$(find . -type f -iname "MLproject" | head -n 1)
+          TARGET_DIR=$(dirname "$MLPROJECT_FILE")
+          echo "Target Directory: $TARGET_DIR"
+          # Run MLflow langsung ke foldernya
+          mlflow run "$TARGET_DIR" --env-manager local
 
       - name: Login to Docker Hub
+        # Step ini bakal skip/error kalo Secrets belum lu setting, biarin aja
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -38,15 +35,23 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
-          TARGET_DIR=$(find . -name "modelling.py" -exec dirname {} \; | head -n 1)
+          MLPROJECT_FILE=$(find . -type f -iname "MLproject" | head -n 1)
+          TARGET_DIR=$(dirname "$MLPROJECT_FILE")
           cd "$TARGET_DIR"
           
-          RUN_ID=$(cat last_run_id.txt)
-          echo "Building Docker Image for Run ID: $RUN_ID"
-          
-          mlflow models build-docker \
-            -m "runs:/$RUN_ID/model" \
-            -n "alvinmahesa/heart-disease-model:latest" \
-            --enable-mlserver
-          
-          docker push "alvinmahesa/heart-disease-model:latest"
+          # Cek apakah file last_run_id.txt ada
+          if [ -f last_run_id.txt ]; then
+            RUN_ID=$(cat last_run_id.txt)
+            echo "Building Docker Image for Run ID: $RUN_ID"
+            
+            mlflow models build-docker \
+              -m "runs:/$RUN_ID/model" \
+              -n "alvinmahesa/heart-disease-model:latest" \
+              -n "alvinmahesa/heart-disease-model:latest" \
+              --enable-mlserver
+            
+            # Docker push cuma jalan kalo login berhasil
+            docker push "alvinmahesa/heart-disease-model:latest"
+          else
+            echo "last_run_id.txt not found, skipping docker build."
+          figit add .
