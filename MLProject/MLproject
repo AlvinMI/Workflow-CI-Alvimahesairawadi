@@ -1,0 +1,5 @@
+name: Heart Disease CI
+
+entry_points:
+  main:
+    command: "python modelling.py"
