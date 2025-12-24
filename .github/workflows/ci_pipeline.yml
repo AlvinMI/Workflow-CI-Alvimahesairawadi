@@ -15,14 +15,8 @@ jobs:
           python-version: '3.12'
 
       - name: Install Dependencies
-        run: pip install mlflow==2.19.0 pandas scikit-learn dagshub matplotlib
-
-      - name: Train Model with MLflow Project
         run: |
-          MLPROJECT_FILE=$(find . -type f -iname "MLproject" | head -n 1)
-          TARGET_DIR=$(dirname "$MLPROJECT_FILE")
-          echo "Target Directory: $TARGET_DIR"
-          mlflow run "$TARGET_DIR" --env-manager local
+          pip install mlflow==2.19.0 pandas scikit-learn dagshub matplotlib
 
       - name: Login to Docker Hub
         uses: docker/login-action@v2
@@ -30,22 +24,19 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and Push Docker Image
+      - name: Train, Build and Push Docker
         run: |
           MLPROJECT_FILE=$(find . -type f -iname "MLproject" | head -n 1)
           TARGET_DIR=$(dirname "$MLPROJECT_FILE")
-          cd "$TARGET_DIR"
           
-          if [ -f last_run_id.txt ]; then
-            RUN_ID=$(cat last_run_id.txt)
-            echo "Building Docker Image for Run ID: $RUN_ID"
-            
-            mlflow models build-docker \
-              -m "runs:/$RUN_ID/model" \
-              -n "alvinmahesa/heart-disease-model:latest" \
-              --enable-mlserver
-            
-            docker push "alvinmahesa/heart-disease-model:latest"
-          else
-            echo "last_run_id.txt not found, skipping docker build."
-          fi
+          mlflow run "$TARGET_DIR" --env-manager local
+          
+          RUN_ID=$(ls -t mlruns/0 | grep -v "meta.yaml" | head -n 1)
+          echo "Found Run ID: $RUN_ID"
+          
+          mlflow models build-docker \
+            -m "mlruns/0/$RUN_ID/artifacts/model" \
+            -n "${{ secrets.DOCKER_USERNAME }}/heart-disease-model:latest" \
+            --enable-mlserver
+
+          docker push "${{ secrets.DOCKER_USERNAME }}/heart-disease-model:latest"
