@@ -26,17 +26,24 @@ jobs:
 
       - name: Train, Build and Push Docker
         run: |
+          # 1. Cari folder project
           MLPROJECT_FILE=$(find . -type f -iname "MLproject" | head -n 1)
           TARGET_DIR=$(dirname "$MLPROJECT_FILE")
           
+          # 2. Jalankan Training
           mlflow run "$TARGET_DIR" --env-manager local
           
-          RUN_ID=$(ls -t mlruns/0 | grep -v "meta.yaml" | head -n 1)
-          echo "Found Run ID: $RUN_ID"
+          # 3. AMBIL RUN ID YANG REAL (Bukan folder 'datasets')
+          # Kita cari folder yang namanya panjang (hex) dan paling baru di mlruns/0
+          RUN_ID=$(ls -dt mlruns/0/*/ | xargs -n 1 basename | grep -E '^[0-9a-f]{32}$' | head -n 1)
           
+          echo "Beneran dapet Run ID: $RUN_ID"
+          
+          # 4. Build Docker Image
           mlflow models build-docker \
             -m "mlruns/0/$RUN_ID/artifacts/model" \
             -n "${{ secrets.DOCKER_USERNAME }}/heart-disease-model:latest" \
             --enable-mlserver
 
+          # 5. Push ke Docker Hub
           docker push "${{ secrets.DOCKER_USERNAME }}/heart-disease-model:latest"
